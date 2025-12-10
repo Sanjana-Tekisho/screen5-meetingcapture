@@ -26,18 +26,3 @@ export enum MeetingPlatform {
   MEET = 'Google Meet',
   TEAMS = 'Microsoft Teams'
 }
-
-export interface TranscriptEvent {
-  type: string;
-  text: string;
-  speaker_id: string | null;
-  is_final: boolean;
-}
-
-export interface TranscriptLine {
-  id: string;
-  speaker: string;
-  text: string;
-  timestamp: string;
-  isHighlighted?: boolean;
-}
