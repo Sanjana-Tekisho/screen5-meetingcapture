@@ -1,0 +1,8 @@
+{
+  "name": "Nebula Delegate Portal",
+  "description": "A sleek, futuristic dark-mode landing page for conference delegates featuring glassmorphism design and AI assistance.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}
