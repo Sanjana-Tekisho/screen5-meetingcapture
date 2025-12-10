@@ -145,7 +145,7 @@ export const useLiveTranscription = ({
                 console.log('Received transcript event:', data);
 
                 // Process transcription events with text
-                if (data.type === 'transcription' && data.text && data.text.trim()) {
+                if ((data.type === 'word' || data.type === 'transcription') && data.text && data.text.trim()) {
                     const timestamp = new Date().toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
