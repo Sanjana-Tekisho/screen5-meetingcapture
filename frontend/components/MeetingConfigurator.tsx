@@ -68,12 +68,69 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
     }
   }, [meetingMode]);
 
-  const handleGenerate = () => {
+  /* DEBUG LOGGING STATE */
+  const [debugLogs, setDebugLogs] = useState<string[]>([]);
+  const addLog = (msg: string) => setDebugLogs(prev => [...prev, `${new Date().toISOString().split('T')[1].slice(0, 8)}: ${msg}`]);
+
+  /* New State for generated links */
+  const [generatedMeetingUrl, setGeneratedMeetingUrl] = useState<string | null>(null);
+  const [generatedEventLink, setGeneratedEventLink] = useState<string | null>(null);
+
+  const handleGenerate = async () => {
+    addLog("handleGenerate called");
+    // alert("Debugging: Generate button clicked!"); // Visual confirmation for user
+
     setIsGenerating(true);
-    setTimeout(() => {
+    setGeneratedMeetingUrl(null);
+    setGeneratedEventLink(null);
+
+    try {
+      addLog("Fetching http://127.0.0.1:8000/google-meet/create");
+      const response = await fetch('http://127.0.0.1:8000/google-meet/create', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          summary: `Meeting with ${selectedDelegate.name}`,
+          start_time: meetingMode === 'SCHEDULE' ? `${selectedDate}T${convertTo24Hour(selectedTime)}:00` : null,
+          end_time: null, // Let backend decide default duration
+        }),
+      });
+
+      addLog(`Response status: ${response.status}`);
+
+      if (response.ok) {
+        const data = await response.json();
+        addLog("Data received successfully");
+        setGeneratedMeetingUrl(data.meet_url);
+        setGeneratedEventLink(data.event_link);
+        setLinkGenerated(true);
+      } else {
+        const errorText = await response.text();
+        addLog(`Error: ${response.status} - ${errorText}`);
+        alert(`Error: Failed to create meeting. Status: ${response.status}`);
+      }
+    } catch (error: any) {
+      addLog(`EXCEPTION: ${error.message}`);
+      console.error("Error creating meeting:", error);
+      alert(`Network Error: ${error.message}`);
+    } finally {
       setIsGenerating(false);
-      setLinkGenerated(true);
-    }, 1500);
+    }
+  };
+
+  // Helper to convert "10:00 AM" to "10:00" (24h format) for ISO string
+  const convertTo24Hour = (timeStr: string) => {
+    const [time, modifier] = timeStr.split(' ');
+    let [hours, minutes] = time.split(':');
+    if (hours === '12') {
+      hours = '00';
+    }
+    if (modifier === 'PM') {
+      hours = (parseInt(hours, 10) + 12).toString();
+    }
+    return `${hours}:${minutes}`;
   };
 
   const handleFetchTranscript = async () => {
@@ -120,6 +177,14 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
 
   return (
     <div className="w-full max-w-6xl mx-auto flex flex-col gap-8 pb-32 animate-in fade-in duration-700">
+
+      {/* DEBUG LOG DISPLAY */}
+      <div className="fixed bottom-4 left-4 right-4 bg-black/90 p-4 rounded-xl border border-red-500/30 text-xs font-mono text-red-300 max-h-40 overflow-y-auto z-50 opacity-90">
+        <div className="font-bold border-b border-red-500/20 mb-2 pb-1">DEBUG CONSOLE (Scroll for more)</div>
+        {debugLogs.length === 0 ? <div className="text-slate-600">No logs yet... Click Generate Link.</div> : debugLogs.map((log, i) => (
+          <div key={i}>{log}</div>
+        ))}
+      </div>
 
       {/* --- HEADER --- */}
       <div className="relative bg-[#1e293b]/60 backdrop-blur-xl border border-white/10 rounded-[32px] p-8 shadow-2xl overflow-hidden group">
@@ -461,16 +526,40 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
             <h3 className="text-lg font-display font-bold text-white mb-2 relative z-10">
               {meetingMode === 'INSTANT' ? 'Instant Access Protocol' : 'Secure Link Generation'}
             </h3>
-            <p className="text-slate-400 text-sm mb-8 relative z-10 leading-relaxed">
+            <p className="text-slate-400 text-sm mb-4 relative z-10 leading-relaxed">
               Create an encrypted access token for {platform} {meetingMode === 'INSTANT' ? 'immediately' : `at ${selectedTime}`}.
             </p>
 
+            {linkGenerated && generatedMeetingUrl && (
+              <div className="mb-4 relative z-10 animate-in fade-in slide-in-from-top-2 duration-500">
+                <label className="text-xs font-bold text-emerald-400 uppercase tracking-wider mb-1 block">Generated Link</label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    readOnly
+                    value={generatedMeetingUrl}
+                    className="w-full bg-black/40 border border-emerald-500/30 rounded-lg px-3 py-2 text-sm text-emerald-300 font-mono focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+              </div>
+            )}
+
             <button
-              onClick={meetingMode === 'POST_MEETING' ? handleFetchTranscript : handleGenerate}
-              disabled={isGenerating || linkGenerated}
+              onClick={() => {
+                if (linkGenerated && generatedMeetingUrl) {
+                  window.open(generatedMeetingUrl, '_blank');
+                  return;
+                }
+                if (meetingMode === 'POST_MEETING') {
+                  handleFetchTranscript();
+                } else {
+                  handleGenerate();
+                }
+              }}
+              disabled={isGenerating}
               className={`w-full h-20 relative overflow-hidden rounded-2xl font-display font-bold text-sm tracking-widest uppercase transition-all duration-500 z-10 group
                   ${linkGenerated
-                  ? 'bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 cursor-default'
+                  ? 'bg-emerald-500/10 border border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/20 cursor-pointer'
                   : meetingMode === 'INSTANT'
                     ? 'bg-red-500 hover:bg-red-400 text-black shadow-[0_0_40px_-10px_rgba(239,68,68,0.6)] border border-red-400 hover:scale-[1.02] active:scale-[0.98]'
                     : meetingMode === 'POST_MEETING'
@@ -486,8 +575,8 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
                   </>
                 ) : linkGenerated ? (
                   <>
-                    <CheckCircle2 size={24} />
-                    <span className="text-lg">Link Active</span>
+                    <Video size={24} />
+                    <span className="text-lg">Join Meeting</span>
                   </>
                 ) : (
                   <>
@@ -517,7 +606,12 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
                 <button
                   key={idx}
                   disabled={!linkGenerated}
-                  onClick={() => setShareMethod(opt.label)}
+                  onClick={() => {
+                    setShareMethod(opt.label);
+                    if (opt.label === 'Copy to Clipboard' && generatedMeetingUrl) {
+                      navigator.clipboard.writeText(generatedMeetingUrl);
+                    }
+                  }}
                   className={`w-full p-4 rounded-xl border flex items-center gap-4 transition-all duration-300 group
                        ${shareMethod === opt.label
                       ? 'bg-cyan-500/20 border-cyan-500/50 text-white'

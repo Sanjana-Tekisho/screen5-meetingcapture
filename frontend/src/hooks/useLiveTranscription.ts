@@ -1,5 +1,21 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { TranscriptEvent, TranscriptLine } from '../types';
+
+export interface TranscriptEvent {
+    type: 'word' | 'segment_complete' | 'transcription' | 'error';
+    text: string;
+    speaker_id?: string | null;
+    is_final: boolean;
+    start?: number;
+    end?: number;
+}
+
+export interface TranscriptLine {
+    id: string;
+    speaker: string;
+    text: string;
+    timestamp: string;
+    isHighlighted?: boolean;
+}
 
 interface UseLiveTranscriptionProps {
     isActive: boolean;
@@ -20,6 +36,11 @@ export const useLiveTranscription = ({
     const processorRef = useRef<ScriptProcessorNode | null>(null);
     const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
     const speakerCounterRef = useRef<Map<string, number>>(new Map());
+    const currentSegmentRef = useRef<{ speaker: string | null, words: string[], lineId: string | null }>({
+        speaker: null,
+        words: [],
+        lineId: null
+    });
 
     const getSpeakerName = useCallback((speakerId: string | null): string => {
         if (!speakerId) {
@@ -103,7 +124,6 @@ export const useLiveTranscription = ({
                 sourceRef.current = source;
 
                 // Use ScriptProcessorNode to get raw PCM data
-                // bufferSize of 4096 gives us chunks every ~256ms at 16kHz
                 const processor = audioContext.createScriptProcessor(4096, 1, 1);
                 processorRef.current = processor;
 
@@ -114,7 +134,6 @@ export const useLiveTranscription = ({
                         // Convert Float32Array to Int16Array (PCM 16-bit)
                         const pcmData = new Int16Array(inputData.length);
                         for (let i = 0; i < inputData.length; i++) {
-                            // Clamp to [-1, 1] and convert to 16-bit integer
                             const s = Math.max(-1, Math.min(1, inputData[i]));
                             pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
                         }
@@ -122,8 +141,6 @@ export const useLiveTranscription = ({
                         // Send raw bytes directly
                         console.log(`Sending ${pcmData.buffer.byteLength} bytes of audio`);
                         ws.send(pcmData.buffer);
-                    } else {
-                        console.warn('WebSocket not open, state:', ws.readyState);
                     }
                 };
 
@@ -144,8 +161,60 @@ export const useLiveTranscription = ({
                 const data: TranscriptEvent = JSON.parse(event.data);
                 console.log('Received transcript event:', data);
 
-                // Process transcription events with text
-                if (data.type === 'transcription' && data.text && data.text.trim()) {
+                // Handle word events - accumulate by speaker
+                if (data.type === 'word' && data.text && data.text.trim()) {
+                    const speakerName = getSpeakerName(data.speaker_id);
+
+                    // If same speaker, accumulate words
+                    if (currentSegmentRef.current.speaker === speakerName && currentSegmentRef.current.lineId) {
+                        currentSegmentRef.current.words.push(data.text.trim());
+
+                        // Update the existing line with accumulated text
+                        setTranscript(prev => {
+                            return prev.map(line =>
+                                line.id === currentSegmentRef.current.lineId
+                                    ? { ...line, text: currentSegmentRef.current.words.join(' ') }
+                                    : line
+                            );
+                        });
+                    } else {
+                        // New speaker - create new line
+                        const timestamp = new Date().toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                        });
+
+                        const lineId = Date.now().toString() + Math.random();
+                        currentSegmentRef.current = {
+                            speaker: speakerName,
+                            words: [data.text.trim()],
+                            lineId: lineId
+                        };
+
+                        const newLine: TranscriptLine = {
+                            id: lineId,
+                            speaker: speakerName,
+                            text: data.text.trim(),
+                            timestamp: timestamp,
+                            isHighlighted: false
+                        };
+
+                        setTranscript(prev => [...prev, newLine]);
+                    }
+                }
+                // Handle segment complete - finalize current segment
+                else if (data.type === 'segment_complete') {
+                    console.log('Segment complete:', data.text);
+                    // Reset accumulator for next segment
+                    currentSegmentRef.current = {
+                        speaker: null,
+                        words: [],
+                        lineId: null
+                    };
+                }
+                // Handle legacy transcription events
+                else if (data.type === 'transcription' && data.text && data.text.trim()) {
                     const timestamp = new Date().toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
@@ -162,24 +231,10 @@ export const useLiveTranscription = ({
                         isHighlighted: false
                     };
 
-                    if (data.is_final) {
-                        // For final transcripts, add as new line
-                        console.log('Adding final transcript:', newLine.text);
-                        setTranscript(prev => [...prev, newLine]);
-                    } else {
-                        // For partial transcripts, replace the last line if it's from the same speaker
-                        console.log('Updating partial transcript:', newLine.text);
-                        setTranscript(prev => {
-                            if (prev.length > 0 && prev[prev.length - 1].speaker === speakerName) {
-                                // Replace last line with updated partial
-                                return [...prev.slice(0, -1), newLine];
-                            } else {
-                                // Add as new line if different speaker or first line
-                                return [...prev, newLine];
-                            }
-                        });
-                    }
-                } else if (data.type === 'error') {
+                    setTranscript(prev => [...prev, newLine]);
+                }
+                // Handle errors
+                else if (data.type === 'error') {
                     console.error('Transcription error:', data.text);
                     setError(data.text);
                 }
@@ -207,6 +262,11 @@ export const useLiveTranscription = ({
     const clearTranscript = useCallback(() => {
         setTranscript([]);
         speakerCounterRef.current.clear();
+        currentSegmentRef.current = {
+            speaker: null,
+            words: [],
+            lineId: null
+        };
     }, []);
 
     return {

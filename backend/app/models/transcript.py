@@ -12,6 +12,8 @@ class TranscriptEvent(BaseModel):
     text: str
     speaker_id: Optional[str] = None
     is_final: bool = False
+    start: Optional[float] = None  # ADD
+    end: Optional[float] = None    # ADD
 
 class Word(BaseModel):
     text: str

@@ -20,9 +20,6 @@ class ElevenLabsService:
         self.buffer_size=int(self.buffer_duration*self.bytes_per_second)
         self.overlap_size=int(self.overlap_duration*self.bytes_per_second)
 
-
-
-
     async def transcribe_stream(self, audio_stream: AsyncGenerator[bytes, None]):
         """
         Buffer audio chunks and send to ElevenLabs API with diarization.
@@ -49,11 +46,11 @@ class ElevenLabsService:
                         if event.type=="word" and hasattr(event,'end'):
                             last_end_time=event.end
 
-                        # Keep overlap for next buffer (last 0.5 seconds)
-                        overlap_buffer = audio_buffer[-self.overlap_size:]
+                    # Keep overlap for next buffer (last 0.5 seconds)
+                    overlap_buffer = audio_buffer[-self.overlap_size:]
                         
-                        # Reset buffer with overlap
-                        audio_buffer = bytearray(overlap_buffer)    
+                    # Reset buffer with overlap
+                    audio_buffer = bytearray(overlap_buffer)    
 
             # Process remaining audio in buffer
             if len(audio_buffer) > self.overlap_size:
@@ -87,7 +84,7 @@ class ElevenLabsService:
                     file_format="pcm_s16le_16",  # 16-bit PCM, 16kHz
                     diarize=True,
                     num_speakers=None,  # Auto-detect
-                    timestamps_granularity="word"  # Word-level timestamps
+                    timestamps_granularity="word"  # word-level timestamps
                 )
             )
             
@@ -96,8 +93,8 @@ class ElevenLabsService:
                 for word_data in response.words:
                     # Extract word information
                     word_text = word_data.text if hasattr(word_data, 'text') else str(word_data)
-                    word_start = (word_data.start if hasattr(word_data, 'start') else 0.0) + time_offset
-                    word_end = (word_data.end if hasattr(word_data, 'end') else 0.0) + time_offset
+                    word_start = (word_data.start if hasattr(word_data, 'start') and word_data.start is not None else 0.0) + time_offset
+                    word_end = (word_data.end if hasattr(word_data, 'end') and word_data.end is not None else 0.0) + time_offset
                     speaker = word_data.speaker if hasattr(word_data, 'speaker') else None
                     
                     # Create word event
@@ -105,7 +102,9 @@ class ElevenLabsService:
                         type="word",
                         text=word_text,
                         speaker_id=speaker,
-                        is_final=True
+                        is_final=True,
+                        start=word_start,
+                        end=word_end
                     )
                     
                     # Small delay to simulate streaming (optional)

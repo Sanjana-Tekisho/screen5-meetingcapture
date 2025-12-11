@@ -6,7 +6,33 @@ router = APIRouter(
     tags=["google-meet"]
 )
 
+
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+class CreateMeetingRequest(BaseModel):
+    summary: str = "New Meeting"
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+
 google_service = GoogleService()
+
+@router.post("/create")
+async def create_meeting(request: CreateMeetingRequest):
+    """
+    Create a new Google Meet meeting (Instant or Scheduled).
+    """
+    try:
+        result = await google_service.create_meeting(
+            summary=request.summary,
+            start_time=request.start_time,
+            end_time=request.end_time
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/transcript/{meeting_id}")
 async def get_transcript(meeting_id: str):
