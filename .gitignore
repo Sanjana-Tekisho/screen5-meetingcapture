@@ -93,3 +93,7 @@ temp/
 *.mp3
 *.pcm
 *.flac
+
+# Google API Credentials
+token.json
+credentials.json
