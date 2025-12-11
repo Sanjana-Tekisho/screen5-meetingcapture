@@ -97,3 +97,7 @@ temp/
 # Google API Credentials
 token.json
 credentials.json
+
+
+#virtual environment
+myenv
