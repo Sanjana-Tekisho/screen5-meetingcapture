@@ -71,19 +71,25 @@ export const useLiveTranscription = ({
 
         // Close audio context
         if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
-            audioContextRef.current.close();
+            audioContextRef.current.close().catch(console.error);
             audioContextRef.current = null;
         }
 
-        // Stop all audio tracks
+        // Stop all audio tracks explicitly and release stream
         if (audioStreamRef.current) {
-            audioStreamRef.current.getTracks().forEach(track => track.stop());
+            audioStreamRef.current.getTracks().forEach(track => {
+                track.stop();
+                track.enabled = false;
+            });
             audioStreamRef.current = null;
         }
 
         // Close WebSocket
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.close();
+        if (wsRef.current) {
+            if (wsRef.current.readyState === WebSocket.OPEN) {
+                wsRef.current.close();
+            }
+            wsRef.current = null;
         }
 
         setIsConnected(false);

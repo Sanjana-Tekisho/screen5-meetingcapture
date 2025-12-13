@@ -94,7 +94,7 @@ export const OfflineMeetingInterface: React.FC<OfflineMeetingInterfaceProps> = (
     error: transcriptionError
   } = useLiveTranscription({
     isActive: status === 'RUNNING' && !useLiveAgent,
-    defaultSpeaker: 'Sarah Jones'
+    defaultSpeaker: 'Unknown Speaker'
   });
 
   useEffect(() => {
@@ -304,7 +304,12 @@ export const OfflineMeetingInterface: React.FC<OfflineMeetingInterfaceProps> = (
       recognition.interimResults = true;
       recognition.lang = 'en-US';
 
+      recognition.onstart = () => {
+        console.log('Voice dictation started');
+      };
+
       recognition.onresult = (event: any) => {
+        console.log('Voice dictation result received', event);
         let finalTranscript = '';
         for (let i = event.resultIndex; i < event.results.length; ++i) {
           if (event.results[i].isFinal) {
@@ -312,10 +317,12 @@ export const OfflineMeetingInterface: React.FC<OfflineMeetingInterfaceProps> = (
           }
         }
         if (finalTranscript) {
+          console.log('Final dictation transcript:', finalTranscript);
           setNotes(prev => prev + (prev ? '\n' : '') + finalTranscript.trim());
         }
       };
       recognition.onerror = (event: any) => {
+        console.error('Voice dictation error:', event.error);
         if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
           setIsListening(false);
           isListeningRef.current = false;
@@ -792,20 +799,6 @@ export const OfflineMeetingInterface: React.FC<OfflineMeetingInterfaceProps> = (
         </div>
 
         <div className="flex items-center gap-6">
-          <div className="hidden lg:flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-xl border border-slate-200">
-            <span className={`text-[10px] font-bold uppercase tracking-widest ${useLiveAgent ? 'text-slate-900' : 'text-slate-400'}`}>
-              Voice Node
-            </span>
-            <button
-              onClick={() => {
-                if (status === 'RUNNING') return;
-                setUseLiveAgent(!useLiveAgent);
-              }}
-              className={`relative w-10 h-5 rounded-full transition-colors duration-300 ${useLiveAgent ? 'bg-red-500 border-red-500' : 'bg-slate-300 border-transparent'} border`}
-            >
-              <div className={`absolute top-0.5 left-0.5 w-3.5 h-3.5 rounded-full bg-white transition-transform duration-300 shadow-sm ${useLiveAgent ? 'translate-x-5' : 'translate-x-0'}`} />
-            </button>
-          </div>
 
           <div className={`hidden md:flex items-center gap-4 px-6 py-3 rounded-xl border ${status === 'RUNNING' ? (useLiveAgent ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-200') : 'bg-slate-100 border-slate-200'
             }`}>

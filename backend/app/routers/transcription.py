@@ -27,8 +27,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 data = await websocket.receive_bytes()
                 await audio_queue.put(data)
         except WebSocketDisconnect:
+            print("Client disconnected")
             await audio_queue.put(None)
-        except Exception:
+        except Exception as e:
+            print(f"Error receiving from client: {e}")
+            import traceback
+            traceback.print_exc()
             await audio_queue.put(None)
 
     # Task to process with ElevenLabs
@@ -38,8 +42,12 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.send_json(transcript_event.dict())
         except Exception as e:
             print(f"Processing error: {e}")
-            # Try to send error to client
-            # await websocket.send_json({"type": "error", "message": str(e)})
+            import traceback
+            traceback.print_exc()
+            try:
+                await websocket.send_json({"type": "error", "text": str(e), "is_final": False})
+            except:
+                pass
 
     # Run both
     receive_task = asyncio.create_task(receive_from_client())

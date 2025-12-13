@@ -11,8 +11,8 @@ class ElevenLabsService:
         self.client = ElevenLabs(api_key=self.api_key)
 
         #Buffer configuration
-        self.buffer_duration = 10.0  # Increased for better speaker separation
-        self.overlap_duration=1.0  # Increased overlap proportionally
+        self.buffer_duration = 10.0
+        self.overlap_duration=2.0
         self.sample_rate=16000
         self.bytes_per_second=self.sample_rate*2
 
@@ -82,33 +82,31 @@ class ElevenLabsService:
                     model_id="scribe_v1",  # Use scribe_v1 for diarization support
                     file=audio_file,
                     file_format="pcm_s16le_16",  # 16-bit PCM, 16kHz
-                    language_code="en",  # Enforce English-only transcription
                     diarize=True,
                     num_speakers=None,  # Auto-detect
+                    language_code="en", # Enforce English
                     timestamps_granularity="word"  # word-level timestamps
                 )
             )
             
-            # Debug: Print response structure
-            print(f"Response type: {type(response)}")
-            print(f"Response attributes: {dir(response)}")
-            if hasattr(response, 'words'):
-                print(f"Number of words: {len(response.words) if response.words else 0}")
-                if response.words and len(response.words) > 0:
-                    print(f"First word sample: {response.words[0]}")
-                    print(f"First word attributes: {dir(response.words[0])}")
-            
             # Parse response and stream words
             if hasattr(response, 'words') and response.words:
                 for word_data in response.words:
-                    # Extract word information
                     word_text = word_data.text if hasattr(word_data, 'text') else str(word_data)
+                    
+                    # DEBUG LOGGING
+                    raw_speaker = getattr(word_data, 'speaker', 'MISSING')
+                    print(f"DEBUG Scribe word: '{word_text}', Raw Speaker: {raw_speaker}")
+
+                    # Filter out non-speech sounds (e.g. (footsteps), [laughter])
+                    if word_text.startswith('(') and word_text.endswith(')'):
+                        continue
+                    if word_text.startswith('[') and word_text.endswith(']'):
+                        continue
+                    
                     word_start = (word_data.start if hasattr(word_data, 'start') and word_data.start is not None else 0.0) + time_offset
                     word_end = (word_data.end if hasattr(word_data, 'end') and word_data.end is not None else 0.0) + time_offset
-                    speaker = word_data.speaker_id if hasattr(word_data, 'speaker_id') else None
-                    
-                    # Debug: Print speaker info
-                    print(f"Word: '{word_text}', Speaker: {speaker}")
+                    speaker = word_data.speaker if hasattr(word_data, 'speaker') else None
                     
                     # Create word event
                     yield TranscriptEvent(
@@ -134,7 +132,5 @@ class ElevenLabsService:
                 
         except Exception as e:
             print(f"Buffer processing error: {e}")
-            import traceback
-            traceback.print_exc()
             yield TranscriptEvent(type="error", text=f"Processing error: {str(e)}", is_final=False)
         
