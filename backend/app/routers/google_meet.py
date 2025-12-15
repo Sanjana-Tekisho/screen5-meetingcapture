@@ -57,3 +57,28 @@ async def list_recordings():
         return recordings
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# --- Calendly Integration ---
+from app.services.calendly_service import CalendlyService
+
+calendly_service = CalendlyService()
+
+
+class BookingLinkRequest(BaseModel):
+    event_type_name: Optional[str] = None  # Optional: filter by event type name
+
+
+@router.post("/booking-link")
+async def create_booking_link(request: BookingLinkRequest = BookingLinkRequest()):
+    """
+    Generate a Calendly booking link for clients to schedule meetings.
+    """
+    try:
+        result = await calendly_service.create_booking_link(
+            event_type_name=request.event_type_name
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+

@@ -16,7 +16,8 @@ import {
    Clock,
    Zap,
    CalendarClock,
-   Loader2
+   Loader2,
+   CalendarPlus
 } from 'lucide-react';
 import { MeetingPlatform, DelegateProfile } from '../types';
 
@@ -53,12 +54,13 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
    const [platform, setPlatform] = useState<MeetingPlatform>(MeetingPlatform.MEET);
    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
    const [selectedTime, setSelectedTime] = useState("10:00 AM");
-   const [meetingMode, setMeetingMode] = useState<'SCHEDULE' | 'INSTANT'>('SCHEDULE');
+   const [meetingMode, setMeetingMode] = useState<'SCHEDULE' | 'INSTANT' | 'BOOKING'>('SCHEDULE');
 
    const [isGenerating, setIsGenerating] = useState(false);
    const [linkGenerated, setLinkGenerated] = useState(false);
    const [generatedMeetingUrl, setGeneratedMeetingUrl] = useState<string | null>(null);
    const [generatedEventLink, setGeneratedEventLink] = useState<string | null>(null);
+   const [bookingUrl, setBookingUrl] = useState<string | null>(null);
 
    useEffect(() => {
       if (meetingMode === 'INSTANT') {
@@ -70,6 +72,7 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
       setLinkGenerated(false);
       setGeneratedMeetingUrl(null);
       setGeneratedEventLink(null);
+      setBookingUrl(null);
    }, [meetingMode]);
 
    const handleGenerate = async () => {
@@ -102,6 +105,36 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
          }
       } catch (error: any) {
          console.error("Error creating meeting:", error);
+         alert(`Network Error: ${error.message}`);
+      } finally {
+         setIsGenerating(false);
+      }
+   };
+
+   const handleGenerateBookingLink = async () => {
+      setIsGenerating(true);
+      setBookingUrl(null);
+
+      try {
+         const response = await fetch('http://127.0.0.1:8000/google-meet/booking-link', {
+            method: 'POST',
+            headers: {
+               'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({}),
+         });
+
+         if (response.ok) {
+            const data = await response.json();
+            setBookingUrl(data.booking_url);
+            setLinkGenerated(true);
+         } else {
+            const errorText = await response.text();
+            console.error("Failed to create booking link", errorText);
+            alert(`Error: Failed to create booking link. Status: ${response.status}`);
+         }
+      } catch (error: any) {
+         console.error("Error creating booking link:", error);
          alert(`Network Error: ${error.message}`);
       } finally {
          setIsGenerating(false);
@@ -219,110 +252,125 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
                   >
                      <Zap size={16} className={meetingMode === 'INSTANT' ? 'text-amber-500' : ''} /> Instant Meeting
                   </button>
+                  <button
+                     onClick={() => setMeetingMode('BOOKING')}
+                     className={`flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold transition-all ${meetingMode === 'BOOKING'
+                        ? 'bg-white text-slate-900 shadow-sm'
+                        : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                  >
+                     <CalendarPlus size={16} className={meetingMode === 'BOOKING' ? 'text-purple-500' : ''} /> Send Booking Link
+                  </button>
                </div>
 
-               <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-xl">
-                  <h2 className="text-xl font-bold text-slate-900 mb-8 flex items-center gap-3">
-                     <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><Video size={20} /></div>
-                     Session Configuration
-                  </h2>
+               {meetingMode !== 'BOOKING' && (
+                  <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-xl">
+                     <h2 className="text-xl font-bold text-slate-900 mb-8 flex items-center gap-3">
+                        <div className="p-2 bg-slate-100 rounded-lg text-slate-600"><Video size={20} /></div>
+                        Session Configuration
+                     </h2>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
 
-                     {/* Platform Selection */}
-                     <div className="space-y-3 relative z-30">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Platform</label>
-                        <div className="relative">
-                           <button
-                              onClick={() => toggleDropdown('platform')}
-                              className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-900 p-4 rounded-2xl transition-all"
-                           >
-                              <div className="flex items-center gap-3">
-                                 <div className={`p-2 rounded-lg ${currentPlatform.bg} ${currentPlatform.color}`}>
-                                    <Video size={18} />
+                        {/* Platform Selection */}
+                        <div className="space-y-3 relative z-30">
+                           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Platform</label>
+                           <div className="relative">
+                              <button
+                                 onClick={() => toggleDropdown('platform')}
+                                 className="w-full flex items-center justify-between bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-900 p-4 rounded-2xl transition-all"
+                              >
+                                 <div className="flex items-center gap-3">
+                                    <div className={`p-2 rounded-lg ${currentPlatform.bg} ${currentPlatform.color}`}>
+                                       <Video size={18} />
+                                    </div>
+                                    <span className="font-medium">{platform}</span>
                                  </div>
-                                 <span className="font-medium">{platform}</span>
-                              </div>
-                              <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeDropdown === 'platform' ? 'rotate-180' : ''}`} />
-                           </button>
+                                 <ChevronDown size={18} className={`text-slate-400 transition-transform ${activeDropdown === 'platform' ? 'rotate-180' : ''}`} />
+                              </button>
 
-                           {activeDropdown === 'platform' && (
-                              <div className="absolute top-full mt-2 left-0 w-full bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
-                                 {platforms.map(p => (
+                              {activeDropdown === 'platform' && (
+                                 <div className="absolute top-full mt-2 left-0 w-full bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden animate-in fade-in slide-in-from-top-2 z-50">
+                                    {platforms.map(p => (
+                                       <button
+                                          key={p.id}
+                                          onClick={() => { setPlatform(p.id); setActiveDropdown(null); }}
+                                          className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors text-slate-700 hover:text-slate-900"
+                                       >
+                                          <div className={`p-2 rounded-lg ${p.bg} ${p.color}`}>
+                                             <Video size={16} />
+                                          </div>
+                                          <span>{p.id}</span>
+                                          {platform === p.id && <CheckCircle2 size={16} className="ml-auto text-blue-500" />}
+                                       </button>
+                                    ))}
+                                 </div>
+                              )}
+                           </div>
+                        </div>
+
+                        {/* Date Selection */}
+                        <div className="space-y-3 relative z-20">
+                           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Date</label>
+                           <div className="relative group">
+                              <input
+                                 type="date"
+                                 disabled={meetingMode === 'INSTANT'}
+                                 value={selectedDate}
+                                 onChange={(e) => setSelectedDate(e.target.value)}
+                                 className="w-full bg-slate-50 text-slate-900 border border-slate-200 p-4 rounded-2xl focus:outline-none focus:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                              />
+                              <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-blue-500 transition-colors" size={18} />
+                           </div>
+                        </div>
+
+                        {/* Time Selection */}
+                        <div className="space-y-3 relative z-10 md:col-span-2">
+                           <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Time Slot</label>
+                           {meetingMode === 'INSTANT' ? (
+                              <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-3">
+                                 <Clock size={18} />
+                                 <span className="font-medium">Starts Immediately ({selectedTime})</span>
+                              </div>
+                           ) : (
+                              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 pr-2">
+                                 {TIME_SLOTS.map(time => (
                                     <button
-                                       key={p.id}
-                                       onClick={() => { setPlatform(p.id); setActiveDropdown(null); }}
-                                       className="w-full flex items-center gap-3 p-4 hover:bg-slate-50 transition-colors text-slate-700 hover:text-slate-900"
+                                       key={time}
+                                       onClick={() => setSelectedTime(time)}
+                                       className={`p-2 text-xs rounded-xl font-medium border transition-all ${selectedTime === time
+                                          ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                                          : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
+                                          }`}
                                     >
-                                       <div className={`p-2 rounded-lg ${p.bg} ${p.color}`}>
-                                          <Video size={16} />
-                                       </div>
-                                       <span>{p.id}</span>
-                                       {platform === p.id && <CheckCircle2 size={16} className="ml-auto text-blue-500" />}
+                                       {time}
                                     </button>
                                  ))}
                               </div>
                            )}
                         </div>
-                     </div>
 
-                     {/* Date Selection */}
-                     <div className="space-y-3 relative z-20">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Date</label>
-                        <div className="relative group">
-                           <input
-                              type="date"
-                              disabled={meetingMode === 'INSTANT'}
-                              value={selectedDate}
-                              onChange={(e) => setSelectedDate(e.target.value)}
-                              className="w-full bg-slate-50 text-slate-900 border border-slate-200 p-4 rounded-2xl focus:outline-none focus:border-blue-400 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                           />
-                           <Calendar className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none group-hover:text-blue-500 transition-colors" size={18} />
-                        </div>
                      </div>
-
-                     {/* Time Selection */}
-                     <div className="space-y-3 relative z-10 md:col-span-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider ml-1">Time Slot</label>
-                        {meetingMode === 'INSTANT' ? (
-                           <div className="p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 flex items-center gap-3">
-                              <Clock size={18} />
-                              <span className="font-medium">Starts Immediately ({selectedTime})</span>
-                           </div>
-                        ) : (
-                           <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-3 max-h-60 overflow-y-auto scrollbar-thin scrollbar-thumb-slate-300 pr-2">
-                              {TIME_SLOTS.map(time => (
-                                 <button
-                                    key={time}
-                                    onClick={() => setSelectedTime(time)}
-                                    className={`p-2 text-xs rounded-xl font-medium border transition-all ${selectedTime === time
-                                       ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                                       : 'bg-slate-50 text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-100'
-                                       }`}
-                                 >
-                                    {time}
-                                 </button>
-                              ))}
-                           </div>
-                        )}
-                     </div>
-
                   </div>
-               </div>
+               )}
             </div>
 
             {/* --- RIGHT: ACTION PANEL --- */}
-            <div className="lg:col-span-4 flex flex-col gap-6">
+            <div className={`flex flex-col gap-6 ${meetingMode === 'BOOKING' ? 'lg:col-span-12 max-w-xl mx-auto' : 'lg:col-span-4'}`}>
 
                {/* Generate Card */}
                <div className={`flex-1 bg-white border border-slate-200 rounded-[32px] p-8 shadow-xl flex flex-col items-center justify-center text-center transition-all duration-500 relative overflow-hidden ${linkGenerated ? 'ring-2 ring-emerald-500/20' : ''}`}>
                   {linkGenerated ? (
                      <div className="w-full animate-in zoom-in duration-500">
-                        <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center text-emerald-600 mx-auto mb-6 shadow-sm">
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 shadow-sm ${meetingMode === 'BOOKING' ? 'bg-purple-100 text-purple-600' : 'bg-emerald-100 text-emerald-600'}`}>
                            <CheckCircle2 size={40} />
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-2">Link Generated</h3>
-                        <p className="text-slate-500 mb-8">Session initialized successfully.</p>
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                           {meetingMode === 'BOOKING' ? 'Booking Link Ready' : 'Link Generated'}
+                        </h3>
+                        <p className="text-slate-500 mb-8">
+                           {meetingMode === 'BOOKING' ? 'Send this link to your client to book a meeting.' : 'Session initialized successfully.'}
+                        </p>
 
                         <div className="mb-6 space-y-2">
                            <div className="w-full bg-slate-50 rounded-xl p-4 flex items-center justify-between border border-slate-200 group cursor-pointer hover:border-emerald-400 transition-colors">
@@ -332,17 +380,31 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
                                  </div>
                                  <input
                                     readOnly
-                                    value={generatedMeetingUrl || ''}
+                                    value={meetingMode === 'BOOKING' ? (bookingUrl || '') : (generatedMeetingUrl || '')}
                                     className="text-sm text-slate-600 font-mono w-full bg-transparent border-none focus:ring-0"
                                  />
                               </div>
                            </div>
                            <button
-                              onClick={() => generatedMeetingUrl && window.open(generatedMeetingUrl, '_blank')}
-                              className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-sm transition-colors"
+                              onClick={() => {
+                                 const url = meetingMode === 'BOOKING' ? bookingUrl : generatedMeetingUrl;
+                                 if (url) {
+                                    navigator.clipboard.writeText(url);
+                                    alert('Link copied to clipboard!');
+                                 }
+                              }}
+                              className="w-full py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-lg font-bold text-sm transition-colors"
                            >
-                              Join Meeting Now
+                              Copy Link
                            </button>
+                           {meetingMode !== 'BOOKING' && (
+                              <button
+                                 onClick={() => generatedMeetingUrl && window.open(generatedMeetingUrl, '_blank')}
+                                 className="w-full py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg font-bold text-sm transition-colors"
+                              >
+                                 Join Meeting Now
+                              </button>
+                           )}
                         </div>
 
                         <div className="space-y-3">
@@ -356,17 +418,23 @@ export const MeetingConfigurator: React.FC<MeetingConfiguratorProps> = ({ onBack
                      </div>
                   ) : (
                      <div className="w-full">
-                        <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center text-blue-600 mx-auto mb-6">
-                           {isGenerating ? <Loader2 size={32} className="animate-spin" /> : <Link2 size={32} />}
+                        <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${meetingMode === 'BOOKING' ? 'bg-purple-50 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                           {isGenerating ? <Loader2 size={32} className="animate-spin" /> : (meetingMode === 'BOOKING' ? <CalendarPlus size={32} /> : <Link2 size={32} />)}
                         </div>
-                        <h3 className="text-2xl font-bold text-slate-900 mb-2">Generate Session</h3>
-                        <p className="text-slate-500 mb-8">Create secure neural link for {selectedDelegate.name}.</p>
+                        <h3 className="text-2xl font-bold text-slate-900 mb-2">
+                           {meetingMode === 'BOOKING' ? 'Generate Booking Link' : 'Generate Session'}
+                        </h3>
+                        <p className="text-slate-500 mb-8">
+                           {meetingMode === 'BOOKING'
+                              ? 'Create a Calendly link for the client to pick a time.'
+                              : `Create secure neural link for ${selectedDelegate.name}.`}
+                        </p>
                         <button
-                           onClick={handleGenerate}
+                           onClick={meetingMode === 'BOOKING' ? handleGenerateBookingLink : handleGenerate}
                            disabled={isGenerating}
-                           className="w-full py-4 rounded-xl bg-slate-900 text-white font-bold hover:bg-slate-800 hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg"
+                           className={`w-full py-4 rounded-xl font-bold hover:scale-[1.02] active:scale-[0.98] transition-all shadow-lg ${meetingMode === 'BOOKING' ? 'bg-purple-600 hover:bg-purple-500 text-white' : 'bg-slate-900 hover:bg-slate-800 text-white'}`}
                         >
-                           {isGenerating ? 'Initializing...' : 'Create Meeting Link'}
+                           {isGenerating ? 'Initializing...' : (meetingMode === 'BOOKING' ? 'Generate Booking Link' : 'Create Meeting Link')}
                         </button>
                      </div>
                   )}
