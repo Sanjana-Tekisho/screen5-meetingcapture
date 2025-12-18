@@ -15,7 +15,8 @@ class PyannoteService:
         # Dictionary mapping speaker label to a LIST of embedding vectors (Gallery)
         self.known_speakers: dict[str, List[np.ndarray]] = {}
         self.speaker_counter = 0
-        self.similarity_threshold = 0.75 # Further relaxed to handle distance ~0.76 variations
+        self.similarity_threshold = 0.75 # Lenient for real-time stability (matches ~0.68)
+        self.merge_threshold = 0.65 # Strict for post-processing merge to avoid false positives
         self.max_gallery_size = 10 # Keep last 10 embeddings per speaker
         
         try:
@@ -229,7 +230,7 @@ class PyannoteService:
                         min_dist = dist
                         best_pair = (spk_a, spk_b)
             
-            if best_pair and min_dist < self.similarity_threshold:
+            if best_pair and min_dist < self.merge_threshold:
                 # Merge pair
                 keep, remove = best_pair
                 # Mapping: anyone mapped to 'remove' now maps to 'keep'
