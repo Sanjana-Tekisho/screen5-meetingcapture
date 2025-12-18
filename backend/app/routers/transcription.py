@@ -5,7 +5,7 @@ import asyncio
 router = APIRouter()
 
 @router.websocket("/ws/transcribe")
-async def websocket_endpoint(websocket: WebSocket):
+async def websocket_endpoint(websocket: WebSocket, meeting_id: str = None):
     await websocket.accept()
     service = ElevenLabsService()
     
@@ -38,7 +38,7 @@ async def websocket_endpoint(websocket: WebSocket):
     # Task to process with ElevenLabs
     async def process_transcription():
         try:
-            async for transcript_event in service.transcribe_stream(audio_generator()):
+            async for transcript_event in service.transcribe_stream(audio_generator(), meeting_id):
                 await websocket.send_json(transcript_event.dict())
         except Exception as e:
             print(f"Processing error: {e}")

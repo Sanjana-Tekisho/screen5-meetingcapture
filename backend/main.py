@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import transcription
+from app.routers import transcription, meetings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -22,6 +22,7 @@ app.add_middleware(
 )
 
 app.include_router(transcription.router)
+app.include_router(meetings.router)
 
 @app.get("/")
 async def root():

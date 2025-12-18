@@ -5,3 +5,9 @@ python-dotenv
 aiohttp
 elevenlabs
 pydantic-settings
+torch
+torchaudio
+pyannote.audio
+supabase
+google-generativeai
+openai

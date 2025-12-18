@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { API_CONFIG } from '../config/constants';
 
 export interface TranscriptEvent {
-    type: 'word' | 'segment_complete' | 'transcription' | 'error';
+    type: 'word' | 'segment_complete' | 'transcription' | 'realtime_transcript' | 'error';
     text: string;
     speaker_id?: string | null;
+    speaker?: string | null;
     is_final: boolean;
     start?: number;
     end?: number;
@@ -102,7 +104,7 @@ export const useLiveTranscription = ({
         }
 
         // Initialize WebSocket connection
-        const ws = new WebSocket('ws://localhost:8000/ws/transcribe');
+        const ws = new WebSocket(API_CONFIG.WEBSOCKET_URL);
         wsRef.current = ws;
 
         ws.onopen = async () => {
@@ -184,29 +186,54 @@ export const useLiveTranscription = ({
                             );
                         });
                     } else {
-                        // New speaker - create new line
-                        const timestamp = new Date().toLocaleTimeString([], {
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            second: '2-digit'
+                        // Check if we can RESUME the last segment
+                        setTranscript(prev => {
+                            if (prev.length > 0) {
+                                const lastLine = prev[prev.length - 1];
+                                // Sticky Speaker: Merge if same name OR if new speaker is Unknown/null (assume continuation)
+                                const isUnknown = !speakerName || speakerName === 'Unknown' || speakerName === 'Speaker' || speakerName === 'Unknown Speaker';
+
+                                if (lastLine.speaker === speakerName || isUnknown) {
+                                    // RESUME MERGE
+                                    // Re-hydrate the ref to point to this line
+                                    currentSegmentRef.current = {
+                                        speaker: lastLine.speaker, // Keep original valid speaker name
+                                        words: [...lastLine.text.split(' '), data.text.trim()],
+                                        lineId: lastLine.id
+                                    };
+
+                                    return prev.map((line, idx) =>
+                                        idx === prev.length - 1
+                                            ? { ...line, text: line.text + ' ' + data.text.trim() }
+                                            : line
+                                    );
+                                }
+                            }
+
+                            // New speaker - create new line
+                            const timestamp = new Date().toLocaleTimeString([], {
+                                hour: '2-digit',
+                                minute: '2-digit',
+                                second: '2-digit'
+                            });
+
+                            const lineId = Date.now().toString() + Math.random();
+                            currentSegmentRef.current = {
+                                speaker: speakerName,
+                                words: [data.text.trim()],
+                                lineId: lineId
+                            };
+
+                            const newLine: TranscriptLine = {
+                                id: lineId,
+                                speaker: speakerName,
+                                text: data.text.trim(),
+                                timestamp: timestamp,
+                                isHighlighted: false
+                            };
+
+                            return [...prev, newLine];
                         });
-
-                        const lineId = Date.now().toString() + Math.random();
-                        currentSegmentRef.current = {
-                            speaker: speakerName,
-                            words: [data.text.trim()],
-                            lineId: lineId
-                        };
-
-                        const newLine: TranscriptLine = {
-                            id: lineId,
-                            speaker: speakerName,
-                            text: data.text.trim(),
-                            timestamp: timestamp,
-                            isHighlighted: false
-                        };
-
-                        setTranscript(prev => [...prev, newLine]);
                     }
                 }
                 // Handle segment complete - finalize current segment
@@ -239,6 +266,59 @@ export const useLiveTranscription = ({
 
                     setTranscript(prev => [...prev, newLine]);
                 }
+                // Handle AssemblyAI realtime transcripts
+                else if (data.type === 'realtime_transcript' && data.text) {
+                    const speakerName = getSpeakerName(data.speaker);
+                    const isFinal = data.is_final;
+                    const text = data.text.trim();
+
+                    if (!text) return;
+
+                    setTranscript(prev => {
+                        // Check if we are updating the current partial line
+                        if (currentSegmentRef.current.lineId) {
+                            // If we have an active line, update it
+                            return prev.map(line =>
+                                line.id === currentSegmentRef.current.lineId
+                                    ? { ...line, text: text, speaker: speakerName }
+                                    : line
+                            );
+                        }
+
+                        // If no active line, create one
+                        const timestamp = new Date().toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                        });
+
+                        const lineId = Date.now().toString() + Math.random();
+                        currentSegmentRef.current = {
+                            speaker: speakerName,
+                            words: [], // Not used for this mode, but keeping structure
+                            lineId: lineId
+                        };
+
+                        const newLine: TranscriptLine = {
+                            id: lineId,
+                            speaker: speakerName,
+                            text: text,
+                            timestamp: timestamp,
+                            isHighlighted: false
+                        };
+
+                        return [...prev, newLine];
+                    });
+
+                    // If this is a final transcript, reset the current segment so next message starts a new line
+                    if (isFinal) {
+                        currentSegmentRef.current = {
+                            speaker: null,
+                            words: [],
+                            lineId: null
+                        };
+                    }
+                }
                 // Handle errors
                 else if (data.type === 'error') {
                     console.error('Transcription error:', data.text);
@@ -254,8 +334,8 @@ export const useLiveTranscription = ({
             setError('Connection error occurred');
         };
 
-        ws.onclose = () => {
-            console.log('WebSocket closed');
+        ws.onclose = (event) => {
+            console.log('WebSocket closed', event.code, event.reason);
             setIsConnected(false);
             cleanup();
         };
