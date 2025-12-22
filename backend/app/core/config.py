@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     ASSEMBLYAI_API_KEY: str
     GEMINI_API_KEY: str
     OPENAI_API_KEY: str
-
+    ZOHO_CLIENT_ID: str
+    ZOHO_CLIENT_SECRET: str
+    ZOHO_REFRESH_TOKEN: str
     class Config:
         env_file = ".env"
 

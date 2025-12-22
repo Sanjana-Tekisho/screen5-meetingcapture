@@ -4,19 +4,21 @@ from typing import AsyncGenerator
 from elevenlabs import ElevenLabs
 from app.core.config import settings
 from app.models.transcript import TranscriptEvent
-from app.services.pyannote_service import PyannoteService
+from app.services.pyannote_service import PyannoteService, pyannote_instance
+from supabase import create_client, Client
+import numpy as np
 
 class ElevenLabsService:
     def __init__(self):
         self.api_key = settings.ELEVENLABS_API_KEY
         self.client = ElevenLabs(api_key=self.api_key)
         
-        # Initialize PyannoteService
-        try:
-            self.pyannote = PyannoteService()
+        # Initialize PyannoteService (Use Singleton)
+        if pyannote_instance:
+            self.pyannote = pyannote_instance
             self.use_pyannote = True
-        except Exception as e:
-            print(f"Warning: Pyannote failed to initialize. Falling back to default: {e}")
+        else:
+            print(f"Warning: Pyannote singleton not available.")
             self.use_pyannote = False
 
         #Buffer configuration
@@ -28,6 +30,38 @@ class ElevenLabsService:
         #Calculate buffer size in bytes
         self.buffer_size=int(self.buffer_duration*self.bytes_per_second)
         self.overlap_size=int(self.overlap_duration*self.bytes_per_second)
+
+    def load_user_profile(self, user_id: str):
+        """
+        Fetch user's voice profile from Supabase and load into Pyannote.
+        """
+        if not self.use_pyannote or not user_id:
+            return
+
+        try:
+            print(f"DEBUG: Fetching voice profile for {user_id}...")
+            url: str = settings.SUPABASE_URL
+            key: str = settings.SUPABASE_ANON_KEY
+            supabase: Client = create_client(url, key)
+            
+            # Download .npy file
+            file_path = f"{user_id}.npy"
+            try:
+                response = supabase.storage.from_("voice-profiles").download(file_path)
+                
+                # Load numpy array from bytes
+                with io.BytesIO(response) as f:
+                    embedding = np.load(f)
+                    
+                # Load into Pyannote
+                self.pyannote.load_profile("User", embedding)
+                print(f"DEBUG: Successfully loaded voice profile for User ({user_id})")
+                
+            except Exception as e:
+                print(f"DEBUG: Could not load voice profile (might not exist): {e}")
+                
+        except Exception as e:
+            print(f"Error in load_user_profile: {e}")
 
     async def transcribe_stream(self, audio_stream: AsyncGenerator[bytes, None], meeting_id: str = None):
         """

@@ -5,9 +5,14 @@ import asyncio
 router = APIRouter()
 
 @router.websocket("/ws/transcribe")
-async def websocket_endpoint(websocket: WebSocket, meeting_id: str = None):
+async def websocket_endpoint(websocket: WebSocket, meeting_id: str = None, user_id: str = None):
     await websocket.accept()
     service = ElevenLabsService()
+    
+    if user_id:
+        # Load voice profile in background to not block
+        # Actually for simplicity calling it directly, it's fast enough or allows immediate recognition
+        service.load_user_profile(user_id)
     
     # Queue to hold audio chunks from client
     audio_queue = asyncio.Queue()
